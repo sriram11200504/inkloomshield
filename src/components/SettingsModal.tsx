@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { UserSettings, saveStoredSettings } from '@/lib/storage';
-import { Key, Sparkles, Check, X, Shield, RefreshCw } from 'lucide-react';
+import { Key, Check, X, Shield, RefreshCw, Sparkles } from 'lucide-react';
 
 interface SettingsModalProps {
   settings: UserSettings;
@@ -11,12 +11,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-export function SettingsModal({
-  settings,
-  onUpdateSettings,
-  isOpen,
-  onClose,
-}: SettingsModalProps) {
+export function SettingsModal({ settings, onUpdateSettings, isOpen, onClose }: SettingsModalProps) {
   const [localKey, setLocalKey] = useState(settings.apiKey || '');
   const [provider, setProvider] = useState<'gemini' | 'anthropic'>(settings.provider || 'gemini');
   const [saved, setSaved] = useState(false);
@@ -26,155 +21,135 @@ export function SettingsModal({
   if (!isOpen) return null;
 
   const handleSave = () => {
-    const updated: UserSettings = {
-      ...settings,
-      apiKey: localKey.trim(),
-      provider,
-    };
+    const updated: UserSettings = { ...settings, apiKey: localKey.trim(), provider };
     onUpdateSettings(updated);
     saveStoredSettings(updated);
     setSaved(true);
-    setTimeout(() => {
-      setSaved(false);
-      onClose();
-    }, 1200);
+    setTimeout(() => { setSaved(false); onClose(); }, 1200);
   };
 
   const handleTestConnection = async () => {
     setTesting(true);
     setTestResult(null);
-
     if (!localKey.trim()) {
-      setTestResult('Using Built-in Deterministic Engine (No key required for judges)');
+      setTestResult('Using built-in deterministic engine — no key required.');
       setTesting(false);
       return;
     }
-
     try {
       const res = await fetch('/api/audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          draftText: 'Test connection draft for Inkloom Shield.',
-          apiKey: localKey.trim(),
-          provider,
-        }),
+        body: JSON.stringify({ draftText: 'Connection test.', apiKey: localKey.trim(), provider }),
       });
       const data = await res.json();
-      if (data.success) {
-        setTestResult(`✓ Successfully connected to ${provider.toUpperCase()} API!`);
-      } else {
-        setTestResult(`Connection returned fallback: ${data.warning || 'Fallback enabled'}`);
-      }
+      setTestResult(data.success
+        ? `Connected to ${provider === 'gemini' ? 'Gemini' : 'Claude'} API successfully.`
+        : `Fallback active: ${data.warning || 'Deterministic engine in use.'}`
+      );
     } catch (err: any) {
-      setTestResult(`Error: ${err.message || 'Connection failed'}`);
+      setTestResult(`Connection failed: ${err.message}`);
     } finally {
       setTesting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
+      <div className="relative w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-slideIn">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/70">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-indigo-500/20 border border-indigo-500/40 text-indigo-400">
-              <Key className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
+              <Key className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">AI Engine & API Configuration</h3>
-              <p className="text-xs text-slate-400 font-mono">Zero-Auth by default for judges</p>
+              <h3 className="text-sm font-semibold text-slate-900">AI Engine Settings</h3>
+              <p className="text-xs text-slate-400">No API key required for demo mode</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-700 rounded-md hover:bg-slate-100 transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4 text-xs">
-          <div className="bg-indigo-950/20 border border-indigo-500/20 rounded-xl p-3.5 space-y-1.5">
-            <div className="flex items-center gap-2 text-indigo-300 font-semibold">
-              <Shield className="w-4 h-4 text-indigo-400" />
-              Judge-Ready Zero-Auth Architecture
-            </div>
-            <p className="text-slate-300 leading-relaxed text-[11px]">
-              No API key is required! Inkloom Shield incorporates a complete deterministic compliance engine that parses guidelines and specifications with instant high-fidelity responses.
+        <div className="p-5 space-y-4">
+          {/* Zero-auth notice */}
+          <div className="flex items-start gap-3 p-3.5 bg-indigo-50 border border-indigo-100 rounded-lg">
+            <Shield className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" />
+            <p className="text-xs text-slate-600 leading-relaxed">
+              The built-in deterministic engine runs without any API key and provides high-fidelity compliance analysis instantly.
             </p>
           </div>
 
+          {/* Provider selection */}
           <div>
-            <label className="block font-semibold text-slate-200 mb-1.5">
-              Select LLM Provider (Optional):
-            </label>
+            <label className="block text-xs font-semibold text-slate-700 mb-2">LLM Provider (optional)</label>
             <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setProvider('gemini')}
-                className={`py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
-                  provider === 'gemini'
-                    ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                Google Gemini (2.5 Flash)
-              </button>
-              <button
-                type="button"
-                onClick={() => setProvider('anthropic')}
-                className={`py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
-                  provider === 'anthropic'
-                    ? 'bg-amber-600/20 border-amber-500 text-amber-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                Anthropic Claude (3.5)
-              </button>
+              {[
+                { id: 'gemini' as const, label: 'Google Gemini 2.5' },
+                { id: 'anthropic' as const, label: 'Anthropic Claude' },
+              ].map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setProvider(p.id)}
+                  className={`py-2 px-3 rounded-lg border text-xs font-medium transition-all text-left ${
+                    provider === p.id
+                      ? 'bg-slate-900 border-slate-900 text-white'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
           </div>
 
+          {/* API Key */}
           <div>
-            <label className="block font-semibold text-slate-200 mb-1.5">
-              Custom API Key (Optional):
+            <label className="block text-xs font-semibold text-slate-700 mb-2">
+              API Key <span className="font-normal text-slate-400">(optional)</span>
             </label>
             <input
               type="password"
-              placeholder={`Enter custom ${provider === 'gemini' ? 'Gemini' : 'Anthropic'} API key...`}
+              placeholder={`${provider === 'gemini' ? 'Gemini' : 'Anthropic'} API key...`}
               value={localKey}
               onChange={(e) => setLocalKey(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-slate-200 focus:outline-none focus:border-indigo-500 font-mono text-xs placeholder:text-slate-600"
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-slate-900 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder:text-slate-400 font-mono"
             />
-            <p className="text-[10px] text-slate-400 mt-1">
-              Keys are strictly stored in local browser memory and never persisted on external servers.
+            <p className="text-[10px] text-slate-400 mt-1.5">
+              Stored in browser memory only — never sent to external servers.
             </p>
           </div>
 
           {testResult && (
-            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-emerald-300">
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium">
               {testResult}
             </div>
           )}
 
-          <div className="flex gap-2 pt-2">
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
             <button
               type="button"
               onClick={handleTestConnection}
               disabled={testing}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition-colors font-medium"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-white text-slate-700 border border-slate-200 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
-              {testing ? 'Testing...' : 'Test Connection'}
+              {testing ? 'Testing…' : 'Test Connection'}
             </button>
             <button
               type="button"
               onClick={handleSave}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-600/30 transition-all font-semibold"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition-colors"
             >
-              {saved ? <Check className="w-4 h-4 text-emerald-300" /> : <Sparkles className="w-4 h-4" />}
+              {saved ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Sparkles className="w-3.5 h-3.5" />}
               {saved ? 'Saved!' : 'Save Settings'}
             </button>
           </div>

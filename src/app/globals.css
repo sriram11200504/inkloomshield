@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --background: #020617;
-  --foreground: #f8fafc;
+  --background: #ffffff;
+  --foreground: #0f172a;
 }
 
 body {
@@ -15,29 +15,44 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom dark sleek scrollbars */
+/* Clean light scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b0f19;
+  background: #f1f5f9;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #cbd5e1;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #94a3b8;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: scale(0.98);
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.18s ease-out forwards;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
   }
   to {
     opacity: 1;
@@ -45,6 +60,6 @@ body {
   }
 }
 
-.animate-fadeIn {
-  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.animate-slideIn {
+  animation: slideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

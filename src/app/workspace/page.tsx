@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
 import { Navbar } from '@/components/Navbar';
 import { ScoreGauge } from '@/components/ScoreGauge';
@@ -10,12 +9,7 @@ import { ToneSlider } from '@/components/ToneSlider';
 import { GuidelineAmbiguityModal } from '@/components/GuidelineAmbiguityModal';
 import { ExportModal } from '@/components/ExportModal';
 import { SettingsModal } from '@/components/SettingsModal';
-import {
-  AuditReport,
-  AuditIssue,
-  AuditIssueType,
-  ToneStyle,
-} from '@/lib/types';
+import { AuditReport, AuditIssue, ToneStyle } from '@/lib/types';
 import {
   getStoredReport,
   saveStoredReport,
@@ -26,22 +20,14 @@ import {
 import { calculateScore } from '@/lib/auditEngine';
 import { TECHCORP_REPORT } from '@/lib/demoData';
 import {
-  Shield,
-  ShieldCheck,
-  ShieldAlert,
-  AlertTriangle,
   Lightbulb,
-  Sparkles,
   CheckCircle2,
   Undo2,
   FileText,
   Edit3,
   Eye,
   Download,
-  Share2,
   ArrowLeft,
-  Search,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
   Bookmark,
@@ -50,99 +36,52 @@ import {
 } from 'lucide-react';
 
 export default function WorkspacePage() {
-  const router = useRouter();
-
-  // State
   const [report, setReport] = useState<AuditReport>(TECHCORP_REPORT);
   const [activeIssueId, setActiveIssueId] = useState<string | null>('issue-1');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [editorMode, setEditorMode] = useState<'highlights' | 'edit'>('highlights');
-  const [draftHistory, setDraftHistory] = useState<string[]>([]);
-  const [isEditingText, setIsEditingText] = useState(false);
-
-  // Modals
   const [showAmbiguityModal, setShowAmbiguityModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [settings, setSettings] = useState<UserSettings>(getStoredSettings());
-
-  // Card expansion state
   const [expandedCitations, setExpandedCitations] = useState<{ [id: string]: boolean }>({
-    'issue-1': true,
-    'issue-2': true,
-    'issue-3': true,
+    'issue-1': true, 'issue-2': true, 'issue-3': true,
   });
-
   const cardRefs = useRef<{ [id: string]: HTMLDivElement | null }>({});
 
   useEffect(() => {
     const loaded = getStoredReport();
     if (loaded) {
       setReport(loaded);
-      setDraftHistory([loaded.currentDraftText]);
-      if (loaded.issues.length > 0) {
-        setActiveIssueId(loaded.issues[0].id);
-      }
+      if (loaded.issues.length > 0) setActiveIssueId(loaded.issues[0].id);
     }
     setSettings(getStoredSettings());
   }, []);
 
-  // Sync to localStorage on report update
   const updateReportState = (newReport: AuditReport) => {
     setReport(newReport);
     saveStoredReport(newReport);
   };
 
-  // Tone Selection per issue
   const handleSelectTone = (issueId: string, tone: ToneStyle) => {
-    const updatedIssues = report.issues.map((issue) => {
-      if (issue.id === issueId) {
-        return { ...issue, selectedTone: tone };
-      }
-      return issue;
-    });
-
-    const newReport: AuditReport = {
-      ...report,
-      issues: updatedIssues,
-    };
-    updateReportState(newReport);
+    const updatedIssues = report.issues.map((issue) =>
+      issue.id === issueId ? { ...issue, selectedTone: tone } : issue
+    );
+    updateReportState({ ...report, issues: updatedIssues });
   };
 
-  // 1-Click "Apply Fix"
   const handleApplyFix = (issue: AuditIssue) => {
     const activeTone = issue.selectedTone || 'balanced';
     const fixText = issue.suggestedFixes[activeTone] || issue.suggestedFixes.balanced;
-
-    // Replace the verbatim flagged text in currentDraftText
     const currentDraft = report.currentDraftText;
-    let newDraft = currentDraft;
+    let newDraft = currentDraft.includes(issue.flaggedText)
+      ? currentDraft.replace(issue.flaggedText, fixText)
+      : currentDraft.replace(new RegExp(escapeRegExp(issue.flaggedText), 'i'), fixText);
 
-    if (currentDraft.includes(issue.flaggedText)) {
-      newDraft = currentDraft.replace(issue.flaggedText, fixText);
-    } else {
-      // If exact string not found (e.g. minor whitespace edits), try case-insensitive or word boundary
-      newDraft = currentDraft.replace(new RegExp(escapeRegExp(issue.flaggedText), 'i'), fixText);
-    }
-
-    // Save previous text to history for undo
-    setDraftHistory((prev) => [...prev, newDraft]);
-
-    // Mark issue as resolved
-    const updatedIssues = report.issues.map((i) => {
-      if (i.id === issue.id) {
-        return {
-          ...i,
-          isResolved: true,
-          appliedFix: fixText,
-        };
-      }
-      return i;
-    });
-
-    // Recalculate Brand Trust Score
+    const updatedIssues = report.issues.map((i) =>
+      i.id === issue.id ? { ...i, isResolved: true, appliedFix: fixText } : i
+    );
     const newScores = calculateScore(updatedIssues);
-
     const newReport: AuditReport = {
       ...report,
       currentDraftText: newDraft,
@@ -154,139 +93,68 @@ export default function WorkspacePage() {
       },
       issues: updatedIssues,
     };
-
     updateReportState(newReport);
 
-    // If all issues are resolved or score reaches 100%, trigger celebratory confetti blast!
     if (newScores.overall === 100 || updatedIssues.every((i) => i.isResolved)) {
       try {
-        confetti({
-          particleCount: 120,
-          spread: 80,
-          origin: { y: 0.6 },
-          colors: ['#10b981', '#6366f1', '#f59e0b', '#ec4899'],
-        });
-      } catch (e) {
-        // Safe fallback
-      }
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#10b981', '#6366f1', '#f59e0b'] });
+      } catch {}
     }
   };
 
-  // Revert / Undo a specific applied fix
   const handleRevertFix = (issue: AuditIssue) => {
     if (!issue.appliedFix) return;
-
-    const currentDraft = report.currentDraftText;
-    const revertedDraft = currentDraft.replace(issue.appliedFix, issue.flaggedText);
-
-    const updatedIssues = report.issues.map((i) => {
-      if (i.id === issue.id) {
-        return {
-          ...i,
-          isResolved: false,
-          appliedFix: undefined,
-        };
-      }
-      return i;
-    });
-
+    const revertedDraft = report.currentDraftText.replace(issue.appliedFix, issue.flaggedText);
+    const updatedIssues = report.issues.map((i) =>
+      i.id === issue.id ? { ...i, isResolved: false, appliedFix: undefined } : i
+    );
     const newScores = calculateScore(updatedIssues);
-
-    const newReport: AuditReport = {
+    updateReportState({
       ...report,
       currentDraftText: revertedDraft,
       currentScore: newScores.overall,
-      scoreBreakdown: {
-        factualAccuracy: newScores.factual,
-        toneAlignment: newScores.tone,
-        guidelineCompliance: newScores.compliance,
-      },
+      scoreBreakdown: { factualAccuracy: newScores.factual, toneAlignment: newScores.tone, guidelineCompliance: newScores.compliance },
       issues: updatedIssues,
-    };
-
-    updateReportState(newReport);
+    });
   };
 
-  // 1-Click "Resolve All Fixes"
   const handleResolveAll = () => {
     let text = report.currentDraftText;
     const updatedIssues = report.issues.map((issue) => {
       const activeTone = issue.selectedTone || 'balanced';
       const fixText = issue.suggestedFixes[activeTone] || issue.suggestedFixes.balanced;
-      if (text.includes(issue.flaggedText)) {
-        text = text.replace(issue.flaggedText, fixText);
-      }
-      return {
-        ...issue,
-        isResolved: true,
-        appliedFix: fixText,
-      };
+      if (text.includes(issue.flaggedText)) text = text.replace(issue.flaggedText, fixText);
+      return { ...issue, isResolved: true, appliedFix: fixText };
     });
-
     const newScores = calculateScore(updatedIssues);
-    const newReport: AuditReport = {
-      ...report,
-      currentDraftText: text,
-      currentScore: newScores.overall,
-      scoreBreakdown: {
-        factualAccuracy: newScores.factual,
-        toneAlignment: newScores.tone,
-        guidelineCompliance: newScores.compliance,
-      },
+    updateReportState({
+      ...report, currentDraftText: text, currentScore: newScores.overall,
+      scoreBreakdown: { factualAccuracy: newScores.factual, toneAlignment: newScores.tone, guidelineCompliance: newScores.compliance },
       issues: updatedIssues,
-    };
-
-    updateReportState(newReport);
-    try {
-      confetti({
-        particleCount: 150,
-        spread: 100,
-        origin: { y: 0.5 },
-      });
-    } catch (e) {}
+    });
+    try { confetti({ particleCount: 130, spread: 90, origin: { y: 0.5 } }); } catch {}
   };
 
-  // Reset Draft to Original
   const handleResetToInitial = () => {
-    const updatedIssues = report.issues.map((i) => ({
-      ...i,
-      isResolved: false,
-      appliedFix: undefined,
-    }));
+    const updatedIssues = report.issues.map((i) => ({ ...i, isResolved: false, appliedFix: undefined }));
     const newScores = calculateScore(updatedIssues);
-
-    const newReport: AuditReport = {
-      ...report,
-      currentDraftText: report.initialDraftText,
-      currentScore: newScores.overall,
-      scoreBreakdown: {
-        factualAccuracy: newScores.factual,
-        toneAlignment: newScores.tone,
-        guidelineCompliance: newScores.compliance,
-      },
+    updateReportState({
+      ...report, currentDraftText: report.initialDraftText, currentScore: newScores.overall,
+      scoreBreakdown: { factualAccuracy: newScores.factual, toneAlignment: newScores.tone, guidelineCompliance: newScores.compliance },
       issues: updatedIssues,
-    };
-
-    updateReportState(newReport);
+    });
   };
 
-  // Click inline highlight: scrolls to corresponding card in the right panel
   const handleHighlightClick = (issueId: string) => {
     setActiveIssueId(issueId);
     const el = cardRefs.current[issueId];
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   const toggleCitation = (issueId: string) => {
-    setExpandedCitations((prev) => ({
-      ...prev,
-      [issueId]: !prev[issueId],
-    }));
+    setExpandedCitations((prev) => ({ ...prev, [issueId]: !prev[issueId] }));
   };
 
-  // Filter Issues
   const filteredIssues = report.issues.filter((issue) => {
     if (filterType === 'ALL') return true;
     if (filterType === 'RESOLVED') return issue.isResolved;
@@ -298,226 +166,177 @@ export default function WorkspacePage() {
   const resolvedCount = report.issues.filter((i) => i.isResolved).length;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-indigo-500/30 selection:text-indigo-200">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
       <Navbar
         currentReport={report}
         onOpenSettings={() => setShowSettingsModal(true)}
-        onLoadJudgePreset={() => {
-          updateReportState(TECHCORP_REPORT);
-          setActiveIssueId('issue-1');
-        }}
+        onLoadJudgePreset={() => { updateReportState(TECHCORP_REPORT); setActiveIssueId('issue-1'); }}
       />
 
-      {/* JURY-SHOCKING FEATURE 2: GUIDELINE FLAW & AMBIGUITY DETECTOR (MACRO INSIGHT TOP BANNER) */}
-      {report.macroInsight && report.macroInsight.hasAmbiguity && (
-        <div className="w-full bg-gradient-to-r from-purple-950/80 via-indigo-950/70 to-purple-950/80 border-b border-purple-500/30 py-3 px-4 sm:px-6">
+      {/* Macro Insight Banner */}
+      {report.macroInsight?.hasAmbiguity && (
+        <div className="w-full bg-violet-50 border-b border-violet-200 py-2.5 px-4 sm:px-6">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shrink-0">
-                <Lightbulb className="w-4 h-4 animate-pulse" />
+            <div className="flex items-center gap-2.5 text-xs">
+              <div className="w-6 h-6 rounded-md bg-violet-100 border border-violet-200 flex items-center justify-center shrink-0">
+                <Lightbulb className="w-3.5 h-3.5 text-violet-600" />
               </div>
-              <div className="text-xs">
-                <span className="font-bold text-purple-300 uppercase tracking-wider font-mono mr-2">
-                  💡 Meta-Insight:
-                </span>
-                <span className="text-slate-200 font-medium">
-                  {report.macroInsight.title} —
-                </span>{' '}
-                <span className="text-purple-200/90 hidden md:inline">
-                  {report.macroInsight.description.substring(0, 110)}...
-                </span>
-              </div>
+              <span className="font-semibold text-violet-800">{report.macroInsight.title}</span>
+              <span className="text-slate-500 hidden md:inline">
+                — {report.macroInsight.description.substring(0, 90)}…
+              </span>
             </div>
-
             <button
               onClick={() => setShowAmbiguityModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30 transition-all shrink-0 hover:scale-105"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 transition-colors shrink-0"
             >
-              <Sparkles className="w-3.5 h-3.5 text-purple-200" />
-              <span>Generate Clarified Rule Proposal</span>
+              <Zap className="w-3 h-3" />
+              Generate Rule Proposal
             </button>
           </div>
         </div>
       )}
 
-      {/* Main Workspace Layout */}
-      <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 flex flex-col space-y-6">
-        {/* Workspace Top Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/60 border border-slate-800 rounded-2xl p-4 backdrop-blur-md">
+      <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 flex flex-col space-y-5">
+
+        {/* Toolbar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
           <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
-              title="Return to Audit Launcher"
+              className="p-2 rounded-lg bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors"
+              title="Back to Audit Launcher"
             >
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-white truncate max-w-md">
-                  {report.draftTitle}
-                </h1>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                  {report.issues.length} Flags
+                <h1 className="text-sm font-semibold text-slate-900 truncate max-w-xs">{report.draftTitle}</h1>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                  {report.issues.length} flags
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-mono">
-                Cross-referenced with: {report.brandGuidelineTitle} & {report.productSpecTitle}
+              <p className="text-xs text-slate-400 mt-0.5 truncate max-w-sm">
+                vs. {report.brandGuidelineTitle} & {report.productSpecTitle}
               </p>
             </div>
           </div>
 
-          {/* Quick Action Controls */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {unresolvedCount > 0 && (
               <button
                 onClick={handleResolveAll}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-xl transition-all"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>Apply All Fixes ({unresolvedCount})</span>
+                Apply All ({unresolvedCount})
               </button>
             )}
-
             <button
               onClick={handleResetToInitial}
-              className="p-2 text-slate-400 hover:text-slate-200 bg-slate-800/80 hover:bg-slate-800 rounded-xl border border-slate-700 transition-colors"
-              title="Reset to Initial Draft"
+              className="p-2 text-slate-500 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
+              title="Reset to initial draft"
             >
               <Undo2 className="w-4 h-4" />
             </button>
-
             <button
               onClick={() => setShowExportModal(true)}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow-lg shadow-indigo-600/30 transition-all hover:scale-105"
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors shadow-sm"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Export Remediated Draft</span>
+              Export
             </button>
           </div>
         </div>
 
-        {/* Side-by-Side Remediation Workspace */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* ========================================================= */}
-          {/* LEFT PANEL: Rich Draft Editor with Interactive Highlights */}
-          {/* ========================================================= */}
-          <div className="lg:col-span-6 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl backdrop-blur-md flex flex-col overflow-hidden">
-            {/* Left Panel Header */}
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+        {/* Main 2-column workspace */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+          {/* LEFT PANEL */}
+          <div className="lg:col-span-6 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col overflow-hidden">
+            {/* Left header */}
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-bold text-white">Content Draft Inspection</span>
-                <span className="text-[10px] font-mono text-slate-400">
+                <FileText className="w-4 h-4 text-slate-400" />
+                <span className="text-sm font-semibold text-slate-900">Draft Inspector</span>
+                <span className="text-xs text-slate-400 tabular-nums">
                   ({report.currentDraftText.split(/\s+/).filter(Boolean).length} words)
                 </span>
               </div>
-
-              {/* View Switcher: Highlights vs Direct Edit */}
-              <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs">
+              {/* View switcher */}
+              <div className="flex items-center bg-slate-100 rounded-md p-0.5 text-xs">
                 <button
                   type="button"
                   onClick={() => setEditorMode('highlights')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors ${
-                    editorMode === 'highlights'
-                      ? 'bg-indigo-600 text-white font-medium'
-                      : 'text-slate-400 hover:text-slate-200'
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-[4px] transition-colors font-medium ${
+                    editorMode === 'highlights' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
                   <Eye className="w-3 h-3" />
-                  <span>Interactive Highlights</span>
+                  Highlights
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditorMode('edit')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors ${
-                    editorMode === 'edit'
-                      ? 'bg-indigo-600 text-white font-medium'
-                      : 'text-slate-400 hover:text-slate-200'
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-[4px] transition-colors font-medium ${
+                    editorMode === 'edit' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                   }`}
                 >
                   <Edit3 className="w-3 h-3" />
-                  <span>Direct Edit</span>
+                  Edit
                 </button>
               </div>
             </div>
 
-            {/* Content Area */}
-            <div className="p-6 min-h-[380px] text-sm leading-relaxed font-sans">
+            {/* Content */}
+            <div className="p-5 min-h-[360px] text-sm leading-relaxed">
               {editorMode === 'highlights' ? (
                 <div className="space-y-4">
-                  <div className="text-slate-200 text-base leading-loose whitespace-pre-wrap select-text">
-                    {renderInteractiveHighlightedText(
-                      report.currentDraftText,
-                      report.issues,
-                      activeIssueId,
-                      handleHighlightClick
-                    )}
+                  <div className="text-slate-800 text-sm leading-loose whitespace-pre-wrap select-text">
+                    {renderInteractiveHighlightedText(report.currentDraftText, report.issues, activeIssueId, handleHighlightClick)}
                   </div>
 
-                  {/* Highlights Legend */}
-                  <div className="pt-6 border-t border-slate-800/80 flex flex-wrap items-center gap-4 text-xs text-slate-400">
-                    <span className="font-mono text-[10px] uppercase text-slate-500">Legend:</span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded bg-rose-500/20 border border-rose-500 text-rose-400 text-[10px] flex items-center justify-center font-bold">
-                        •
+                  {/* Legend */}
+                  <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                    <span className="font-medium text-slate-400">Legend:</span>
+                    {[
+                      { label: 'Factual Error', cls: 'bg-red-100 border-red-300 text-red-600' },
+                      { label: 'Tone Mismatch', cls: 'bg-amber-100 border-amber-300 text-amber-700' },
+                      { label: 'Ambiguity', cls: 'bg-violet-100 border-violet-300 text-violet-600' },
+                      { label: 'Fixed', cls: 'bg-emerald-100 border-emerald-300 text-emerald-700' },
+                    ].map((l) => (
+                      <span key={l.label} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium ${l.cls}`}>
+                        {l.label}
                       </span>
-                      Factual Error
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded bg-amber-500/20 border border-amber-500 text-amber-400 text-[10px] flex items-center justify-center font-bold">
-                        •
-                      </span>
-                      Tone Mismatch
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded bg-purple-500/20 border border-purple-500 text-purple-400 text-[10px] flex items-center justify-center font-bold">
-                        •
-                      </span>
-                      Guideline Ambiguity
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded bg-emerald-500/20 border border-emerald-500 text-emerald-400 text-[10px] flex items-center justify-center font-bold">
-                        ✓
-                      </span>
-                      Remediated
-                    </span>
+                    ))}
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col h-full space-y-2">
+                <div className="flex flex-col h-full gap-2">
                   <textarea
                     value={report.currentDraftText}
-                    onChange={(e) => {
-                      const newText = e.target.value;
-                      const newReport = { ...report, currentDraftText: newText };
-                      updateReportState(newReport);
-                    }}
-                    className="w-full h-80 bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-200 font-sans text-sm leading-relaxed resize-none focus:outline-none focus:border-indigo-500"
-                    placeholder="Type or edit draft text live..."
+                    onChange={(e) => updateReportState({ ...report, currentDraftText: e.target.value })}
+                    className="w-full h-80 bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-800 text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    placeholder="Edit draft directly…"
                   />
-                  <p className="text-[11px] text-slate-400">
-                    Direct edits synchronize live with compliance verification rules.
-                  </p>
+                  <p className="text-[11px] text-slate-400">Direct edits sync with the audit report live.</p>
                 </div>
               )}
             </div>
 
-            {/* Left Panel Footer / Readability Stats */}
-            <div className="p-3.5 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 font-mono">
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                Status: {unresolvedCount === 0 ? 'Fully Remediated' : `${unresolvedCount} Pending Issues`}
+            {/* Footer */}
+            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${unresolvedCount === 0 ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+                {unresolvedCount === 0 ? 'Fully remediated' : `${unresolvedCount} pending`}
               </span>
-              <span>Reading Grade: 9 (Flesch: 68)</span>
+              <span className="font-mono">Flesch: 68</span>
             </div>
           </div>
 
-          {/* ========================================================= */}
-          {/* RIGHT PANEL: Live Trust Score Gauge & Remediation Cards   */}
-          {/* ========================================================= */}
-          <div className="lg:col-span-6 space-y-6">
-            {/* Live Brand Trust Score Gauge */}
+          {/* RIGHT PANEL */}
+          <div className="lg:col-span-6 space-y-4">
+            {/* Score Gauge */}
             <ScoreGauge
               score={report.currentScore}
               breakdown={report.scoreBreakdown}
@@ -525,190 +344,116 @@ export default function WorkspacePage() {
               resolvedIssues={resolvedCount}
             />
 
-            {/* Filter Tabs Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-              <div className="flex flex-wrap gap-1 text-xs font-medium">
+            {/* Filter tabs */}
+            <div className="flex flex-wrap items-center gap-1.5 bg-white border border-slate-200 rounded-xl p-2 shadow-sm">
+              {[
+                { key: 'ALL', label: `All (${report.issues.length})`, dot: '' },
+                { key: 'FACTUAL_ERROR', label: `Factual (${report.issues.filter(i => i.type === 'FACTUAL_ERROR').length})`, dot: 'bg-red-500' },
+                { key: 'TONE_MISMATCH', label: `Tone (${report.issues.filter(i => i.type === 'TONE_MISMATCH').length})`, dot: 'bg-amber-400' },
+                { key: 'RESOLVED', label: `Resolved (${resolvedCount})`, dot: 'bg-emerald-500' },
+              ].map((tab) => (
                 <button
+                  key={tab.key}
                   type="button"
-                  onClick={() => setFilterType('ALL')}
-                  className={`px-3 py-1.5 rounded-lg transition-colors ${
-                    filterType === 'ALL'
-                      ? 'bg-slate-800 text-white font-semibold'
-                      : 'text-slate-400 hover:text-slate-200'
+                  onClick={() => setFilterType(tab.key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    filterType === tab.key
+                      ? 'bg-slate-900 text-white'
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
                   }`}
                 >
-                  All ({report.issues.length})
+                  {tab.dot && <span className={`w-1.5 h-1.5 rounded-full ${tab.dot}`} />}
+                  {tab.label}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterType('FACTUAL_ERROR')}
-                  className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
-                    filterType === 'FACTUAL_ERROR'
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                      : 'text-slate-400 hover:text-rose-300'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                  Factual ({report.issues.filter((i) => i.type === 'FACTUAL_ERROR').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterType('TONE_MISMATCH')}
-                  className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
-                    filterType === 'TONE_MISMATCH'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                      : 'text-slate-400 hover:text-amber-300'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                  Tone ({report.issues.filter((i) => i.type === 'TONE_MISMATCH').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterType('RESOLVED')}
-                  className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
-                    filterType === 'RESOLVED'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'text-slate-400 hover:text-emerald-300'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                  Resolved ({resolvedCount})
-                </button>
-              </div>
-
-              <span className="text-[11px] font-mono text-slate-500 hidden sm:inline">
-                Click highlight to jump
-              </span>
+              ))}
             </div>
 
-            {/* Issue Remediation Cards List */}
-            <div className="space-y-4">
+            {/* Issue Cards */}
+            <div className="space-y-3">
               {filteredIssues.length === 0 ? (
-                <div className="p-8 text-center bg-slate-900/40 border border-slate-800 rounded-2xl space-y-2">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-                  <h4 className="text-sm font-bold text-white">No Issues Match Current Filter</h4>
-                  <p className="text-xs text-slate-400">
-                    All flagged issues in this category are either resolved or filtered out.
-                  </p>
+                <div className="p-8 text-center bg-white border border-slate-200 rounded-xl shadow-sm space-y-2">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+                  <h4 className="text-sm font-semibold text-slate-900">No issues match this filter</h4>
+                  <p className="text-xs text-slate-400">All flagged items in this category have been resolved.</p>
                 </div>
               ) : (
                 filteredIssues.map((issue) => {
                   const isActive = activeIssueId === issue.id;
                   const isCitationOpen = !!expandedCitations[issue.id];
                   const activeTone = issue.selectedTone || 'balanced';
-                  const activeFix = issue.suggestedFixes[activeTone] || issue.suggestedFixes.balanced;
 
-                  let borderStyle = 'border-slate-800 hover:border-slate-700';
-                  let badgeBg = 'bg-slate-800 text-slate-300';
-                  let typeLabel = 'Compliance Issue';
-
-                  if (issue.type === 'FACTUAL_ERROR') {
-                    borderStyle = isActive
-                      ? 'border-rose-500/80 shadow-lg shadow-rose-500/10'
-                      : 'border-rose-500/30';
-                    badgeBg = 'bg-rose-500/20 text-rose-300 border-rose-500/30';
-                    typeLabel = 'Factual Error';
-                  } else if (issue.type === 'TONE_MISMATCH') {
-                    borderStyle = isActive
-                      ? 'border-amber-500/80 shadow-lg shadow-amber-500/10'
-                      : 'border-amber-500/30';
-                    badgeBg = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-                    typeLabel = 'Tone Mismatch';
-                  } else {
-                    borderStyle = isActive
-                      ? 'border-purple-500/80 shadow-lg shadow-purple-500/10'
-                      : 'border-purple-500/30';
-                    badgeBg = 'bg-purple-500/20 text-purple-300 border-purple-500/30';
-                    typeLabel = 'Guideline Ambiguity';
-                  }
-
-                  if (issue.isResolved) {
-                    borderStyle = 'border-emerald-500/30 bg-emerald-950/10';
-                  }
+                  const issueStyle = issue.isResolved
+                    ? { border: 'border-emerald-200 bg-emerald-50/30', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Resolved' }
+                    : issue.type === 'FACTUAL_ERROR'
+                    ? { border: isActive ? 'border-red-300 shadow-md' : 'border-red-200', badge: 'bg-red-50 text-red-700 border-red-200', label: 'Factual Error' }
+                    : issue.type === 'TONE_MISMATCH'
+                    ? { border: isActive ? 'border-amber-300 shadow-md' : 'border-amber-200', badge: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Tone Mismatch' }
+                    : { border: isActive ? 'border-violet-300 shadow-md' : 'border-violet-200', badge: 'bg-violet-50 text-violet-700 border-violet-200', label: 'Guideline Issue' };
 
                   return (
                     <div
                       key={issue.id}
-                      ref={(el) => {
-                        cardRefs.current[issue.id] = el;
-                      }}
-                      className={`bg-slate-900/90 border rounded-2xl p-5 transition-all duration-300 ${borderStyle} ${
-                        isActive ? 'ring-1 ring-indigo-500/40' : ''
-                      }`}
+                      ref={(el) => { cardRefs.current[issue.id] = el; }}
+                      className={`bg-white border rounded-xl p-4 transition-all duration-200 ${issueStyle.border} ${isActive && !issue.isResolved ? 'ring-2 ring-indigo-200' : ''}`}
                     >
-                      {/* Card Header */}
+                      {/* Card header */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <span
-                            className={`text-xs font-mono font-semibold px-2.5 py-0.5 rounded-full border ${badgeBg}`}
-                          >
-                            {typeLabel}
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${issueStyle.badge}`}>
+                            {issueStyle.label}
                           </span>
-                          <span className="text-[10px] font-mono uppercase text-slate-500">
-                            Severity: {issue.severity}
+                          <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">
+                            {issue.severity}
                           </span>
                         </div>
-
                         {issue.isResolved ? (
-                          <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                            <Check className="w-3.5 h-3.5" />
-                            Resolved
+                          <span className="flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                            <Check className="w-3 h-3" />
+                            Fixed
                           </span>
                         ) : (
-                          <span className="text-[11px] font-mono text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full">
-                            Active Trigger
+                          <span className="text-[10px] font-medium text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+                            Needs fix
                           </span>
                         )}
                       </div>
 
-                      {/* Flagged Text Callout */}
-                      <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-3 mb-3">
-                        <div className="text-[10px] font-mono uppercase text-slate-500 mb-1">
-                          Flagged in Draft:
-                        </div>
-                        <p className="text-xs font-medium text-rose-300 line-through decoration-rose-500/50">
+                      {/* Flagged text */}
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mb-3">
+                        <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">Flagged text</div>
+                        <p className="text-xs font-medium text-red-600 line-through decoration-red-400/60">
                           &ldquo;{issue.flaggedText}&rdquo;
                         </p>
                       </div>
 
-                      {/* AI Governance Explanation */}
-                      <div className="text-xs text-slate-300 leading-relaxed mb-3">
-                        {issue.explanation}
-                      </div>
+                      {/* Explanation */}
+                      <p className="text-xs text-slate-600 leading-relaxed mb-3">{issue.explanation}</p>
 
-                      {/* Grounded Citation Accordion */}
-                      <div className="mb-4">
+                      {/* Citation accordion */}
+                      <div className="mb-3">
                         <button
                           type="button"
                           onClick={() => toggleCitation(issue.id)}
-                          className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-slate-700 text-xs text-slate-300 transition-colors"
+                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 hover:border-slate-300 text-xs text-slate-600 transition-colors"
                         >
-                          <span className="flex items-center gap-2 font-mono text-indigo-300">
-                            <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
-                            <span>Grounded Citation: {issue.citation}</span>
+                          <span className="flex items-center gap-2 font-medium">
+                            <Bookmark className="w-3.5 h-3.5 text-indigo-500" />
+                            {issue.citation}
                           </span>
-                          {isCitationOpen ? (
-                            <ChevronUp className="w-4 h-4 text-slate-400" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4 text-slate-400" />
-                          )}
+                          {isCitationOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                         </button>
-
                         {isCitationOpen && (
-                          <div className="mt-2 p-3 rounded-xl bg-slate-950/90 border border-indigo-500/20 text-xs space-y-1.5 animate-fadeIn">
-                            <div className="text-[10px] font-mono text-slate-400 uppercase">
-                              Ground Truth Reference:
-                            </div>
-                            <blockquote className="text-slate-200 italic border-l-2 border-indigo-500 pl-2.5 py-0.5 leading-relaxed">
+                          <div className="mt-1.5 px-3 py-2.5 rounded-lg bg-indigo-50 border border-indigo-100 text-xs animate-fadeIn">
+                            <div className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wide mb-1">Source quote</div>
+                            <blockquote className="text-slate-700 italic border-l-2 border-indigo-300 pl-2.5 leading-relaxed">
                               &ldquo;{issue.groundedSourceQuote}&rdquo;
                             </blockquote>
                           </div>
                         )}
                       </div>
 
-                      {/* JURY-SHOCKING FEATURE 1: INTENT-PRESERVING TONE SLIDER */}
-                      <div className="mb-4">
+                      {/* Tone Slider */}
+                      <div className="mb-3">
                         <ToneSlider
                           selectedTone={activeTone}
                           onSelectTone={(tone) => handleSelectTone(issue.id, tone)}
@@ -717,29 +462,28 @@ export default function WorkspacePage() {
                         />
                       </div>
 
-                      {/* Action Button: 1-Click "Apply Fix" or "Revert Fix" */}
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          {issue.isResolved ? 'Text updated in draft' : 'Ready to apply'}
-                        </div>
-
+                      {/* Actions */}
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                        <span className="text-[11px] text-slate-400">
+                          {issue.isResolved ? 'Applied to draft' : 'Select tone · apply fix'}
+                        </span>
                         {issue.isResolved ? (
                           <button
                             type="button"
                             onClick={() => handleRevertFix(issue)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
                           >
                             <Undo2 className="w-3.5 h-3.5" />
-                            <span>Revert Fix</span>
+                            Revert
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={() => handleApplyFix(issue)}
-                            className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl shadow-lg shadow-emerald-600/25 transition-all hover:scale-105 active:scale-95"
+                            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-sm"
                           >
-                            <Check className="w-4 h-4" />
-                            <span>Apply Fix Live</span>
+                            <Check className="w-3.5 h-3.5" />
+                            Apply Fix
                           </button>
                         )}
                       </div>
@@ -752,7 +496,6 @@ export default function WorkspacePage() {
         </div>
       </div>
 
-      {/* Guideline Flaw & Ambiguity Proposal Modal */}
       {report.macroInsight && (
         <GuidelineAmbiguityModal
           insight={report.macroInsight}
@@ -760,15 +503,7 @@ export default function WorkspacePage() {
           onClose={() => setShowAmbiguityModal(false)}
         />
       )}
-
-      {/* Export Remediated Content Modal */}
-      <ExportModal
-        report={report}
-        isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
-      />
-
-      {/* Settings Modal */}
+      <ExportModal report={report} isOpen={showExportModal} onClose={() => setShowExportModal(false)} />
       <SettingsModal
         settings={settings}
         onUpdateSettings={setSettings}
@@ -779,7 +514,7 @@ export default function WorkspacePage() {
   );
 }
 
-// Utility: Render interactive inline highlights for the left editor panel
+// Inline highlight renderer
 function renderInteractiveHighlightedText(
   text: string,
   issues: AuditIssue[],
@@ -788,87 +523,64 @@ function renderInteractiveHighlightedText(
 ) {
   if (!text) return null;
 
-  // Find all occurrences of flagged or remediated strings
-  type Span = {
-    start: number;
-    end: number;
-    issue: AuditIssue;
-    isRemediated: boolean;
-    str: string;
-  };
-
+  type Span = { start: number; end: number; issue: AuditIssue; isRemediated: boolean; str: string };
   const spans: Span[] = [];
 
   issues.forEach((issue) => {
-    // If resolved, look for appliedFix, else look for flaggedText
     const target = issue.isResolved && issue.appliedFix ? issue.appliedFix : issue.flaggedText;
     if (!target) return;
-
     let index = text.indexOf(target);
     while (index !== -1) {
-      spans.push({
-        start: index,
-        end: index + target.length,
-        issue,
-        isRemediated: !!issue.isResolved,
-        str: target,
-      });
+      spans.push({ start: index, end: index + target.length, issue, isRemediated: !!issue.isResolved, str: target });
       index = text.indexOf(target, index + target.length);
     }
   });
 
-  if (spans.length === 0) {
-    return text;
-  }
-
-  // Sort spans by start index
+  if (spans.length === 0) return text;
   spans.sort((a, b) => a.start - b.start);
 
   const elements: React.ReactNode[] = [];
   let lastIndex = 0;
 
   spans.forEach((span, idx) => {
-    if (span.start < lastIndex) return; // avoid overlapping conflicts
-
-    // Push text before highlight
+    if (span.start < lastIndex) return;
     if (span.start > lastIndex) {
-      elements.push(
-        <span key={`text-${idx}`}>{text.substring(lastIndex, span.start)}</span>
-      );
+      elements.push(<span key={`text-${idx}`}>{text.substring(lastIndex, span.start)}</span>);
     }
 
     const { issue, isRemediated, str } = span;
     const isActive = activeIssueId === issue.id;
 
-    let colorClasses = 'bg-rose-500/20 text-rose-200 border-b-2 border-rose-500';
+    let cls = 'bg-red-100 text-red-800 border-b-2 border-red-400';
+    let tag = 'Factual';
     if (isRemediated) {
-      colorClasses = 'bg-emerald-500/20 text-emerald-200 border-b-2 border-emerald-500';
+      cls = 'bg-emerald-100 text-emerald-800 border-b-2 border-emerald-500';
+      tag = '✓ Fixed';
     } else if (issue.type === 'TONE_MISMATCH') {
-      colorClasses = 'bg-amber-500/20 text-amber-200 border-b-2 border-amber-500';
+      cls = 'bg-amber-100 text-amber-800 border-b-2 border-amber-400';
+      tag = 'Tone';
     } else if (issue.type === 'GUIDELINE_AMBIGUITY' || issue.type === 'GUIDELINE_CONFLICT') {
-      colorClasses = 'bg-purple-500/20 text-purple-200 border-b-2 border-purple-500';
+      cls = 'bg-violet-100 text-violet-800 border-b-2 border-violet-400';
+      tag = 'Policy';
     }
 
     elements.push(
       <mark
         key={`mark-${issue.id}-${idx}`}
         onClick={() => onHighlightClick(issue.id)}
-        className={`px-1 py-0.5 rounded cursor-pointer transition-all duration-200 ${colorClasses} ${
-          isActive ? 'ring-2 ring-indigo-400 scale-[1.02] shadow-sm' : 'hover:opacity-90'
+        className={`px-0.5 py-0 rounded-[3px] cursor-pointer transition-all duration-150 ${cls} ${
+          isActive ? 'ring-2 ring-indigo-400 ring-offset-1' : 'hover:opacity-80'
         }`}
-        title={`Click to view remediation for: ${issue.flaggedText}`}
+        title={`Click to view: ${issue.flaggedText}`}
       >
         {str}
-        <span className="ml-1 text-[10px] font-mono opacity-80">
-          [{isRemediated ? '✓ FIXED' : issue.type === 'FACTUAL_ERROR' ? 'FACT' : 'TONE'}]
-        </span>
+        <span className="ml-1 text-[9px] font-semibold uppercase opacity-70">[{tag}]</span>
       </mark>
     );
 
     lastIndex = span.end;
   });
 
-  // Push remaining text
   if (lastIndex < text.length) {
     elements.push(<span key="text-end">{text.substring(lastIndex)}</span>);
   }
